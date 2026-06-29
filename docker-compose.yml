@@ -1,0 +1,43 @@
+version: "3.9"
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No "ports:" — only reachable from the backend container, never from outside EC2.
+
+  backend:
+    image: ${REGISTRY}/${IMAGE_NAMESPACE}/sb-backend:${IMAGE_TAG}
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+    # No "ports:" — only reachable from the frontend container's Nginx, via /api/.
+
+  frontend:
+    image: ${REGISTRY}/${IMAGE_NAMESPACE}/sb-frontend:${IMAGE_TAG}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT}:80"   # the ONLY port published to the EC2 host
+
+volumes:
+  mysql_data:
